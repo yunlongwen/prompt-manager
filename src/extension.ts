@@ -358,26 +358,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     }
   );
 
-  // 同步相关命令
-  const pullFromRemoteCmd = vscode.commands.registerCommand(COMMANDS.PULL_FROM_REMOTE, async () => {
-    try {
-      await promptManager.pullFromRemote();
-    } catch (error) {
-      console.error("从远端拉取失败:", error);
-      vscode.window.showErrorMessage("拉取失败");
-    }
-  });
-
-  const pushToRemoteCmd = vscode.commands.registerCommand(COMMANDS.PUSH_TO_REMOTE, async () => {
-    try {
-      await promptManager.pushToRemote();
-    } catch (error) {
-      console.error("推送到远端失败:", error);
-      vscode.window.showErrorMessage("推送失败");
-    }
-  });
-
-  // Git相关命令
+  // 同步相关命令（侧边栏按钮）
   const gitPushCmd = vscode.commands.registerCommand(COMMANDS.GIT_PUSH, async () => {
     try {
       await gitPush();
@@ -502,10 +483,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     // 说明书相关命令
     viewGuideFromTreeCmd,
     editGuideFromTreeCmd,
-    // 同步相关命令
-    pullFromRemoteCmd,
-    pushToRemoteCmd,
-    // Git相关命令
+    // 同步相关命令（侧边栏按钮）
     gitPushCmd,
     gitPullCmd
   );
@@ -1042,25 +1020,171 @@ async function showWelcomeMessage(context: vscode.ExtensionContext) {
 }
 
 /**
- * 执行Git Push操作 - 推送提示词数据到远端
+ * 执行Git Push操作 - 推送提示词数据到GitHub
  */
 async function gitPush(): Promise<void> {
   try {
-    await promptManager.pushToRemote();
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage("未找到工作区");
+      return;
+    }
+
+    // 显示确认对话框
+    const confirmed = await vscode.window.showInformationMessage(
+      `确定要推送提示词数据到GitHub吗？\n\n这将导出当前的所有提示词并推送到远程仓库。`,
+      { modal: false },
+      "确认推送"
+    );
+
+    if (confirmed !== "确认推送") {
+      return;
+    }
+
+    // 显示进度提示
+    await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: "推送提示词数据",
+      cancellable: false
+    }, async (progress) => {
+      progress.report({ message: "正在导出提示词数据..." });
+
+      // 导出当前提示词数据
+      const exportData = await promptManager.exportData();
+
+      progress.report({ message: "正在写入数据文件..." });
+
+      // 将数据写入到工作区的同步文件
+      const syncFilePath = vscode.Uri.joinPath(workspaceFolder.uri, '.prompt-manager-sync.json');
+      const jsonContent = JSON.stringify(exportData, null, 2);
+      await vscode.workspace.fs.writeFile(syncFilePath, Buffer.from(jsonContent, 'utf8'));
+
+      progress.report({ message: "正在推送到GitHub..." });
+
+      // 使用终端执行git命令推送
+      const terminal = vscode.window.createTerminal({
+        name: "Push Prompts",
+        cwd: workspaceFolder.uri.fsPath
+      });
+
+      return new Promise<void>((resolve, reject) => {
+        let completed = false;
+
+        const disposable = vscode.window.onDidCloseTerminal(closedTerminal => {
+          if (closedTerminal === terminal && !completed) {
+            completed = true;
+            disposable.dispose();
+            resolve();
+          }
+        });
+
+        terminal.show();
+        terminal.sendText(`git add .prompt-manager-sync.json`);
+        terminal.sendText(`git commit -m "Sync prompt data: ${new Date().toISOString()}"`);
+        terminal.sendText(`git push`);
+
+        // 设置超时，如果10秒内没有完成则认为成功
+        setTimeout(() => {
+          if (!completed) {
+            completed = true;
+            terminal.dispose();
+            disposable.dispose();
+            resolve();
+          }
+        }, 10000);
+
+        vscode.window.showInformationMessage("提示词数据已推送到GitHub");
+      });
+    });
+
   } catch (error) {
     console.error("推送提示词数据失败:", error);
-    vscode.window.showErrorMessage("推送失败");
+    vscode.window.showErrorMessage(`推送失败: ${error instanceof Error ? error.message : '未知错误'}`);
   }
 }
 
 /**
- * 执行Git Pull操作 - 从远端拉取最新的提示词数据并覆盖本地数据库
+ * 执行Git Pull操作 - 从GitHub拉取最新的提示词数据并覆盖本地数据库
  */
 async function gitPull(): Promise<void> {
   try {
-    await promptManager.pullFromRemote();
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage("未找到工作区");
+      return;
+    }
+
+    // 显示确认对话框
+    const confirmed = await vscode.window.showWarningMessage(
+      `⚠️ 确定要从GitHub拉取提示词数据吗？\n\n这将覆盖当前的所有提示词和分类数据，且不可恢复！`,
+      { modal: true },
+      "确认拉取"
+    );
+
+    if (confirmed !== "确认拉取") {
+      return;
+    }
+
+    // 显示进度提示
+    await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: "拉取提示词数据",
+      cancellable: false
+    }, async (progress) => {
+      progress.report({ message: "正在从GitHub拉取..." });
+
+      // 使用终端执行git pull
+      const terminal = vscode.window.createTerminal({
+        name: "Pull Prompts",
+        cwd: workspaceFolder.uri.fsPath
+      });
+
+      return new Promise<void>((resolve, reject) => {
+        let completed = false;
+
+        const disposable = vscode.window.onDidCloseTerminal(closedTerminal => {
+          if (closedTerminal === terminal && !completed) {
+            completed = true;
+            disposable.dispose();
+
+            // 拉取完成后，读取同步文件并导入
+            setTimeout(async () => {
+              try {
+                const syncFilePath = vscode.Uri.joinPath(workspaceFolder.uri, '.prompt-manager-sync.json');
+                const fileContent = await vscode.workspace.fs.readFile(syncFilePath);
+                const importData = JSON.parse(fileContent.toString());
+
+                progress.report({ message: "正在导入提示词数据..." });
+                await promptManager.importData(importData);
+
+                vscode.window.showInformationMessage("提示词数据已从GitHub成功拉取并导入");
+                resolve();
+              } catch (importError) {
+                console.error("导入数据失败:", importError);
+                vscode.window.showErrorMessage("数据拉取成功，但导入失败");
+                reject(importError);
+              }
+            }, 1000);
+          }
+        });
+
+        terminal.show();
+        terminal.sendText(`git pull`);
+
+        // 设置超时
+        setTimeout(() => {
+          if (!completed) {
+            completed = true;
+            terminal.dispose();
+            disposable.dispose();
+            reject(new Error("拉取超时"));
+          }
+        }, 15000);
+      });
+    });
+
   } catch (error) {
     console.error("拉取提示词数据失败:", error);
-    vscode.window.showErrorMessage("拉取失败");
+    vscode.window.showErrorMessage(`拉取失败: ${error instanceof Error ? error.message : '未知错误'}`);
   }
 }

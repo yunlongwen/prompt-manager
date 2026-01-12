@@ -40,8 +40,6 @@
     "commands.prompt-manager.viewGuideFromTree.title": "👁️ 查看说明书",
     "commands.prompt-manager.editGuideFromTree.title": "✏️ 编辑说明书",
     "commands.prompt-manager.deleteUncategorizedPromptFromTree.title": "🗑️ 彻底删除",
-    "commands.prompt-manager.pullFromRemote.title": "⬇️ 从远端拉取",
-    "commands.prompt-manager.pushToRemote.title": "⬆️ 推送到远端",
     "commands.prompt-manager.gitPush.title": "⬆️ 推送提示词",
     "commands.prompt-manager.gitPull.title": "⬇️ 拉取提示词"
 }

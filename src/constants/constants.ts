@@ -37,10 +37,7 @@ export const COMMANDS = {
   EDIT_GUIDE_FROM_TREE: "prompt-manager.editGuideFromTree",
   // 未分类提示词彻底删除命令
   DELETE_UNCATEGORIZED_PROMPT_FROM_TREE: "prompt-manager.deleteUncategorizedPromptFromTree",
-  // 同步相关命令
-  PULL_FROM_REMOTE: "prompt-manager.pullFromRemote",
-  PUSH_TO_REMOTE: "prompt-manager.pushToRemote",
-  // Git相关命令
+  // 同步相关命令（侧边栏按钮）
   GIT_PUSH: "prompt-manager.gitPush",
   GIT_PULL: "prompt-manager.gitPull",
 } as const;
