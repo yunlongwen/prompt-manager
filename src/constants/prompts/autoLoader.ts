@@ -127,17 +127,15 @@ function isPromptModuleFile(fileName: string): boolean {
  */
 function getCategoryIcon(categoryName: string): string {
   const iconMap: Record<string, string> = {
-    'coding': 'code',
-    'writing': 'book',
-    'general': 'symbol-misc',
-    'development': 'tools',
-    'design': 'paintcan',
-    'analysis': 'search',
-    'business': 'briefcase',
-    'uidesign': 'paintbrush',
-    'other': 'chat',
+    'metaprompt': 'lightbulb',
+    'programming': 'code',
+    'philosophy-tools': 'search',
+    'content-creation': 'book',
+    'productivity': 'tools',
+    'education': 'mortar-board',
+    'business-analysis': 'briefcase',
   };
-  
+
   return iconMap[categoryName.toLowerCase()] || 'folder';
 }
 
@@ -148,16 +146,14 @@ function getCategoryIcon(categoryName: string): string {
  */
 function getSortOrder(categoryName: string): number {
   const orderMap: Record<string, number> = {
-    'general': 0,
-    'coding': 1,
-    'writing': 2,
-    'development': 3,
-    'design': 4,
-    'analysis': 5,
-    'business': 6,
-    'uidesign': 7,
-    'other': 8,
+    'metaprompt': 0,
+    'programming': 1,
+    'philosophy-tools': 2,
+    'content-creation': 3,
+    'productivity': 4,
+    'education': 5,
+    'business-analysis': 6,
   };
-  
+
   return orderMap[categoryName.toLowerCase()] || 999;
 } 

@@ -191,6 +191,53 @@ export interface IImportExportService {
 }
 
 /**
+ * 同步选项接口
+ */
+export interface SyncOptions {
+  /** 强制覆盖本地数据 */
+  force?: boolean;
+  /** 覆盖本地数据 */
+  overwriteLocal?: boolean;
+}
+
+/**
+ * 同步结果接口
+ */
+export interface SyncResult {
+  /** 是否成功 */
+  success: boolean;
+  /** 同步的数据统计 */
+  data?: {
+    promptsSynced: number;
+    categoriesSynced: number;
+    action: "pull" | "push" | "force_pull";
+  };
+  /** 错误信息 */
+  error?: string;
+  /** 错误代码 */
+  errorCode?: string;
+}
+
+/**
+ * 同步服务接口
+ */
+export interface ISyncService {
+  /** 从远端拉取数据 */
+  pull(options?: SyncOptions): Promise<SyncResult>;
+
+  /** 推送数据到远端 */
+  push(options?: SyncOptions): Promise<SyncResult>;
+
+  /** 获取同步状态 */
+  getSyncStatus(): Promise<{
+    isConfigured: boolean;
+    serverUrl: string;
+    hasAuthToken: boolean;
+    lastSyncTime?: Date;
+  }>;
+}
+
+/**
  * Prompt管理器接口
  */
 export interface IPromptManager {
@@ -293,7 +340,7 @@ export interface TreePromptItem {
   label: string;
 
   /** 上下文值，用于确定菜单项可见性 */
-  contextValue: "promptItem" | "categoryItem";
+  contextValue: "promptItem" | "categoryItem" | "guideItem";
 
   /** 图标路径 */
   iconPath?: vscode.ThemeIcon;
@@ -334,6 +381,15 @@ export interface TreeCategoryItem extends TreePromptItem {
 export interface TreePromptItemData extends TreePromptItem {
   contextValue: "promptItem";
   promptData: PromptItem;
+}
+
+/**
+ * TreeView 说明书项目接口
+ */
+export interface TreeGuideItem extends TreePromptItem {
+  contextValue: "guideItem";
+  guideData: PromptItem;
+  categoryId: string;
 }
 
 /**

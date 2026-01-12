@@ -177,6 +177,7 @@
     "category.coding": "Coding",
     "category.writing": "Writing",
     "category.uidesign": "UI Design",
+    "category.metaprompt": "Meta Prompt",
 
     "defaultPrompt.codeReview": "Code Review",
     "defaultPrompt.codeReviewContent": "Please review the following code, focusing on:\n1. Code quality and readability\n2. Potential bugs and performance issues\n3. Best practices adherence\n4. Security considerations\n\nCode:\n```\n[Paste code here]\n```",

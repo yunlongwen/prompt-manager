@@ -177,6 +177,7 @@
   "category.coding": "编程",
   "category.writing": "写作",
   "category.uidesign": "UI设计",
+  "category.metaprompt": "元提示词",
   
   "defaultPrompt.codeReview": "代码审查",
   "defaultPrompt.codeReviewContent": "请审查以下代码，重点关注：\n1. 代码质量和可读性\n2. 潜在的bug和性能问题\n3. 最佳实践的遵循情况\n4. 安全性考虑\n\n代码：\n```\n[在此处粘贴代码]\n```",

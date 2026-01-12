@@ -33,5 +33,13 @@
     "configuration.properties.promptManager.defaultAction.enumDescriptions.chat": "💬 发送到Chat",
     "configuration.properties.promptManager.language.description": "插件语言 / Plugin language",
     "configuration.properties.promptManager.language.enumDescriptions.en": "English",
-    "configuration.properties.promptManager.language.enumDescriptions.zh-cn": "中文"
+    "configuration.properties.promptManager.language.enumDescriptions.zh-cn": "中文",
+    "configuration.properties.promptManager.syncServerUrl.description": "同步服务器地址 / Sync server URL",
+    "configuration.properties.promptManager.syncAuthToken.description": "同步认证令牌 / Sync authentication token",
+
+    "commands.prompt-manager.viewGuideFromTree.title": "👁️ 查看说明书",
+    "commands.prompt-manager.editGuideFromTree.title": "✏️ 编辑说明书",
+    "commands.prompt-manager.deleteUncategorizedPromptFromTree.title": "🗑️ 彻底删除",
+    "commands.prompt-manager.pullFromRemote.title": "⬇️ 从远端拉取",
+    "commands.prompt-manager.pushToRemote.title": "⬆️ 推送到远端"
 }

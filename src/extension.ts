@@ -312,6 +312,71 @@ function registerCommands(context: vscode.ExtensionContext) {
     }
   );
 
+  // 说明书相关命令
+  const viewGuideFromTreeCmd = vscode.commands.registerCommand(COMMANDS.VIEW_GUIDE_FROM_TREE, async (guideItem) => {
+    try {
+      if (guideItem && guideItem.guideData) {
+        await viewGuide(guideItem.guideData);
+      }
+    } catch (error) {
+      console.error("从TreeView查看说明书失败:", error);
+      vscode.window.showErrorMessage("查看说明书失败");
+    }
+  });
+
+  const editGuideFromTreeCmd = vscode.commands.registerCommand(COMMANDS.EDIT_GUIDE_FROM_TREE, async (guideItem) => {
+    try {
+      if (guideItem && guideItem.guideData) {
+        await editGuide(guideItem.guideData, guideItem.categoryId);
+      }
+    } catch (error) {
+      console.error("从TreeView编辑说明书失败:", error);
+      vscode.window.showErrorMessage("编辑说明书失败");
+    }
+  });
+
+  // 未分类提示词彻底删除命令
+  const deleteUncategorizedPromptFromTreeCmd = vscode.commands.registerCommand(
+    COMMANDS.DELETE_UNCATEGORIZED_PROMPT_FROM_TREE,
+    async (promptItem) => {
+      try {
+        if (promptItem && promptItem.promptData && promptItem.parentId === "__uncategorized__") {
+          const confirmed = await vscode.window.showWarningMessage(
+            `确定要彻底删除提示词 "${promptItem.promptData.title}" 吗？\n\n此操作不可恢复！`,
+            { modal: true },
+            "确定删除"
+          );
+
+          if (confirmed === "确定删除") {
+            await promptManager.deleteUncategorizedPromptCompletely(promptItem.promptData.id);
+          }
+        }
+      } catch (error) {
+        console.error("从TreeView彻底删除未分类提示词失败:", error);
+        vscode.window.showErrorMessage("删除失败");
+      }
+    }
+  );
+
+  // 同步相关命令
+  const pullFromRemoteCmd = vscode.commands.registerCommand(COMMANDS.PULL_FROM_REMOTE, async () => {
+    try {
+      await promptManager.pullFromRemote();
+    } catch (error) {
+      console.error("从远端拉取失败:", error);
+      vscode.window.showErrorMessage("拉取失败");
+    }
+  });
+
+  const pushToRemoteCmd = vscode.commands.registerCommand(COMMANDS.PUSH_TO_REMOTE, async () => {
+    try {
+      await promptManager.pushToRemote();
+    } catch (error) {
+      console.error("推送到远端失败:", error);
+      vscode.window.showErrorMessage("推送失败");
+    }
+  });
+
   // 注册Chat集成相关命令（支持多编辑器）
   const sendToChatCmd = vscode.commands.registerCommand(COMMANDS.SEND_TO_CHAT, async () => {
     try {
@@ -414,7 +479,13 @@ function registerCommands(context: vscode.ExtensionContext) {
     // 设置命令
     openSettingsCmd,
     // 数据管理命令
-    reinitializeDefaultDataCmd
+    reinitializeDefaultDataCmd,
+    // 说明书相关命令
+    viewGuideFromTreeCmd,
+    editGuideFromTreeCmd,
+    // 同步相关命令
+    pullFromRemoteCmd,
+    pushToRemoteCmd
   );
 
   console.log("命令处理器注册完成");
@@ -814,6 +885,105 @@ async function clearAllData() {
   } catch (error) {
     console.error("清空数据失败:", error);
     vscode.window.showErrorMessage("清空数据失败");
+  }
+}
+
+/**
+ * 查看说明书
+ */
+async function viewGuide(guidePrompt: any) {
+  try {
+    // 创建一个新的文档来显示说明书内容
+    const document = await vscode.workspace.openTextDocument({
+      content: guidePrompt.content,
+      language: 'markdown',
+    });
+
+    // 显示文档
+    await vscode.window.showTextDocument(document, {
+      preview: true,
+      viewColumn: vscode.ViewColumn.One,
+    });
+
+    // 设置文档为只读模式
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document === document) {
+      // 通过禁用编辑功能来实现只读效果
+      const disposable = vscode.workspace.onDidChangeTextDocument((e) => {
+        if (e.document === document && e.contentChanges.length > 0) {
+          vscode.window.showInformationMessage("说明书为只读模式，如需修改请使用编辑功能");
+          // 撤销更改
+          setTimeout(() => {
+            vscode.commands.executeCommand('undo');
+          }, 10);
+        }
+      });
+
+      // 5秒后自动清理监听器
+      setTimeout(() => {
+        disposable.dispose();
+      }, 5000);
+    }
+  } catch (error) {
+    console.error("查看说明书失败:", error);
+    vscode.window.showErrorMessage("查看说明书失败");
+  }
+}
+
+/**
+ * 编辑说明书
+ */
+async function editGuide(guidePrompt: any, categoryId: string) {
+  try {
+    // 创建一个新的文档来编辑说明书内容
+    const document = await vscode.workspace.openTextDocument({
+      content: guidePrompt.content,
+      language: 'markdown',
+    });
+
+    // 显示文档
+    const editor = await vscode.window.showTextDocument(document, {
+      preview: false,
+      viewColumn: vscode.ViewColumn.One,
+    });
+
+    // 监听文档保存事件，自动更新说明书
+    const saveListener = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+      if (savedDoc === document) {
+        try {
+          // 获取更新后的内容
+          const updatedContent = savedDoc.getText();
+
+          // 更新说明书提示词
+          const updatedPrompt = {
+            ...guidePrompt,
+            content: updatedContent,
+          };
+
+          await promptManager.updatePrompt(updatedPrompt);
+
+          vscode.window.showInformationMessage("说明书已更新");
+
+          // 清理监听器
+          saveListener.dispose();
+        } catch (error) {
+          console.error("更新说明书失败:", error);
+          vscode.window.showErrorMessage("更新说明书失败");
+        }
+      }
+    });
+
+    // 监听文档关闭事件，清理监听器
+    const closeListener = vscode.workspace.onDidCloseTextDocument((closedDoc) => {
+      if (closedDoc === document) {
+        saveListener.dispose();
+        closeListener.dispose();
+      }
+    });
+
+  } catch (error) {
+    console.error("编辑说明书失败:", error);
+    vscode.window.showErrorMessage("编辑说明书失败");
   }
 }
 

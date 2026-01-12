@@ -6,6 +6,7 @@ import {
   IPromptTreeDataProvider,
   TreeCategoryItem,
   TreePromptItemData,
+  TreeGuideItem,
 } from "../types";
 import { StorageService } from "../services/StorageService";
 import { TREE_CONTEXT_VALUES, TREE_ICONS, TREE_SPECIAL_CATEGORIES, COMMANDS } from "../constants/constants";
@@ -194,18 +195,36 @@ export class PromptTreeDataProvider implements IPromptTreeDataProvider {
 
       if (element.contextValue === TREE_CONTEXT_VALUES.CATEGORY_ITEM) {
         // 分类项目的子项目是该分类下的所有prompt
+        let categoryPrompts: PromptItem[];
+
         if (element.id === TREE_SPECIAL_CATEGORIES.UNCATEGORIZED) {
           // 未分类
           const categories = await this.storageService.getCategories();
-          const uncategorizedPrompts = prompts.filter(
+          categoryPrompts = prompts.filter(
             (p) => !p.categoryId || !categories.some((c) => c.id === p.categoryId)
           );
-          return uncategorizedPrompts.map((p) => this.createPromptItem(p, element.id));
         } else {
           // 普通分类
-          const categoryPrompts = prompts.filter((p) => p.categoryId === element.id);
-          return categoryPrompts.map((p) => this.createPromptItem(p, element.id));
+          categoryPrompts = prompts.filter((p) => p.categoryId === element.id);
         }
+
+        // 为普通分类添加说明书项目作为第一个项目
+        const childItems: TreePromptItem[] = [];
+        if (element.id !== TREE_SPECIAL_CATEGORIES.UNCATEGORIZED) {
+          const guideItem = await this.createGuideItem(element.id, element.categoryData);
+          if (guideItem) {
+            childItems.push(guideItem);
+          }
+        }
+
+        // 添加其他prompt项目，排除说明书（因为说明书已经作为特殊项目添加）
+        const nonGuidePrompts = categoryPrompts.filter(p =>
+          p.id !== `${element.id}-guide`
+        );
+        const promptItems = nonGuidePrompts.map((p) => this.createPromptItem(p, element.id));
+        childItems.push(...(promptItems as TreePromptItem[]));
+
+        return childItems;
       }
 
       return [];
@@ -282,6 +301,46 @@ export class PromptTreeDataProvider implements IPromptTreeDataProvider {
       promptData: prompt,
       parentId: parentId,
     };
+  }
+
+  /**
+   * 创建说明书项目
+   * @param categoryId 分类ID
+   * @param categoryData 分类数据
+   * @returns 说明书TreeItem或undefined
+   */
+  private async createGuideItem(categoryId: string, categoryData?: PromptCategory): Promise<TreeGuideItem | undefined> {
+    try {
+      const prompts = await this.storageService.getPrompts();
+      // 查找该分类的说明书（假设说明书以"guide"结尾）
+      const guidePrompt = prompts.find(p =>
+        p.categoryId === categoryId &&
+        (p.id.endsWith('-guide') || p.title.includes('说明书'))
+      );
+
+      if (!guidePrompt) {
+        return undefined;
+      }
+
+      return {
+        id: `guide-${categoryId}`,
+        label: "📖 说明书",
+        contextValue: TREE_CONTEXT_VALUES.GUIDE_ITEM,
+        iconPath: new vscode.ThemeIcon("book"),
+        collapsibleState: vscode.TreeItemCollapsibleState.None,
+        command: {
+          command: COMMANDS.VIEW_GUIDE_FROM_TREE,
+          title: "查看说明书",
+          arguments: [{ guideData: guidePrompt, categoryId }],
+        },
+        guideData: guidePrompt,
+        categoryId: categoryId,
+        parentId: categoryId,
+      };
+    } catch (error) {
+      console.error("创建说明书项目失败:", error);
+      return undefined;
+    }
   }
 
   /**

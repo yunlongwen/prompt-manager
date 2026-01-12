@@ -115,19 +115,25 @@ export class StorageService implements IStorageService {
   }
 
   /**
-   * 删除Prompt
+   * 删除Prompt（移至未分类）
    */
   async deletePrompt(id: string): Promise<void> {
     try {
       const prompts = await this.getPrompts();
-      const filteredPrompts = prompts.filter((prompt) => prompt.id !== id);
+      const promptIndex = prompts.findIndex((prompt) => prompt.id === id);
 
-      if (filteredPrompts.length === prompts.length) {
+      if (promptIndex === -1) {
         throw new Error(`未找到ID为 ${id} 的Prompt`);
       }
 
-      await this.context.globalState.update(STORAGE_KEYS.PROMPTS, filteredPrompts);
-      console.log(`Prompt删除成功: ${id}`);
+      // 将Prompt移至未分类，而不是完全删除
+      prompts[promptIndex] = {
+        ...prompts[promptIndex],
+        categoryId: undefined,
+      };
+
+      await this.context.globalState.update(STORAGE_KEYS.PROMPTS, prompts);
+      console.log(`Prompt移至未分类成功: ${id}`);
     } catch (error) {
       console.error("删除Prompt失败:", error);
       throw error;

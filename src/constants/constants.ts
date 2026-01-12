@@ -32,6 +32,14 @@ export const COMMANDS = {
   OPEN_SETTINGS: "prompt-manager.openSettings",
   // 数据管理相关命令
   REINITIALIZE_DEFAULT_DATA: "prompt-manager.reinitializeDefaultData",
+  // 说明书相关命令
+  VIEW_GUIDE_FROM_TREE: "prompt-manager.viewGuideFromTree",
+  EDIT_GUIDE_FROM_TREE: "prompt-manager.editGuideFromTree",
+  // 未分类提示词彻底删除命令
+  DELETE_UNCATEGORIZED_PROMPT_FROM_TREE: "prompt-manager.deleteUncategorizedPromptFromTree",
+  // 同步相关命令
+  PULL_FROM_REMOTE: "prompt-manager.pullFromRemote",
+  PUSH_TO_REMOTE: "prompt-manager.pushToRemote",
 } as const;
 
 /** 存储键常量 */
@@ -43,47 +51,54 @@ export const STORAGE_KEYS = {
 
 /** 默认分类 */
 export const DEFAULT_CATEGORIES = {
-  GENERAL: {
-    id: "general",
-    name: "通用",
-    description: "通用Prompt",
-    icon: "symbol-misc",
+  METAPROMPT: {
+    id: "metaprompt",
+    name: "元提示词",
+    description: "元提示词相关Prompt",
+    icon: "lightbulb",
     sortOrder: 0,
   },
-  CODING: {
-    id: "coding",
+  PROGRAMMING: {
+    id: "programming",
     name: "编程",
     description: "编程相关Prompt",
     icon: "code",
     sortOrder: 1,
   },
-  WRITING: {
-    id: "writing",
-    name: "写作",
-    description: "写作相关Prompt",
-    icon: "book",
+  PHILOSOPHY_TOOLS: {
+    id: "philosophy-tools",
+    name: "哲学工具箱",
+    description: "哲学工具箱相关Prompt",
+    icon: "search",
     sortOrder: 2,
   },
-  UIDESIGN: {
-    id: "uidesign",
-    name: "UI设计",
-    description: "UI设计相关Prompt",
-    icon: "paintcan",
+  CONTENT_CREATION: {
+    id: "content-creation",
+    name: "内容创作",
+    description: "内容创作相关Prompt",
+    icon: "book",
     sortOrder: 3,
   },
-  LLM: {
-    id: "llm",
-    name: "LLM",
-    description: "LLM相关Prompt",
-    icon: "flame",
+  PRODUCTIVITY: {
+    id: "productivity",
+    name: "生产力",
+    description: "生产力相关Prompt",
+    icon: "tools",
     sortOrder: 4,
   },
-  OTHER: {
-    id: "other",
-    name: "其他",
-    description: "其他Prompt",
-    icon: "chat",
+  EDUCATION: {
+    id: "education",
+    name: "学习教育",
+    description: "学习教育相关Prompt",
+    icon: "mortar-board",
     sortOrder: 5,
+  },
+  BUSINESS_ANALYSIS: {
+    id: "business-analysis",
+    name: "商业分析",
+    description: "商业分析相关Prompt",
+    icon: "briefcase",
+    sortOrder: 6,
   },
 } as const;
 
@@ -176,6 +191,8 @@ export const TREE_CONTEXT_VALUES = {
   PROMPT_ITEM: "promptItem",
   /** 分类项目 */
   CATEGORY_ITEM: "categoryItem",
+  /** 说明书项目 */
+  GUIDE_ITEM: "guideItem",
 } as const;
 
 /** TreeView图标常量 */
@@ -223,47 +240,54 @@ export function getLocalizedDefaultCategories(t: (key: string) => string) {
   // 如果没有自动加载的分类，则使用默认的硬编码分类作为后备
   if (defaultCategories.length === 0) {
     return {
-      GENERAL: {
-        id: "general",
-        name: t("category.general"),
-        description: t("category.general"),
-        icon: "symbol-misc",
+      METAPROMPT: {
+        id: "metaprompt",
+        name: t("category.metaprompt"),
+        description: t("category.metaprompt"),
+        icon: "lightbulb",
         sortOrder: 0,
       },
-      CODING: {
-        id: "coding",
-        name: t("category.coding"),
-        description: t("category.coding"),
+      PROGRAMMING: {
+        id: "programming",
+        name: t("category.programming"),
+        description: t("category.programming"),
         icon: "code",
         sortOrder: 1,
       },
-      WRITING: {
-        id: "writing",
-        name: t("category.writing"),
-        description: t("category.writing"),
-        icon: "book",
+      PHILOSOPHY_TOOLS: {
+        id: "philosophy-tools",
+        name: t("category.philosophy-tools"),
+        description: t("category.philosophy-tools"),
+        icon: "search",
         sortOrder: 2,
       },
-      UIDESIGN: {
-        id: "uidesign",
-        name: t("category.uidesign"),
-        description: t("category.uidesign"),
-        icon: "paintcan",
+      CONTENT_CREATION: {
+        id: "content-creation",
+        name: t("category.content-creation"),
+        description: t("category.content-creation"),
+        icon: "book",
         sortOrder: 3,
       },
-      LLM: {
-        id: "llm",
-        name: t("category.llm"),
-        description: t("category.llm"),
-        icon: "flame",
+      PRODUCTIVITY: {
+        id: "productivity",
+        name: t("category.productivity"),
+        description: t("category.productivity"),
+        icon: "tools",
         sortOrder: 4,
       },
-      OTHER: {
-        id: "other",
-        name: t("category.other"),
-        description: t("category.other"),
-        icon: "chat",
+      EDUCATION: {
+        id: "education",
+        name: t("category.education"),
+        description: t("category.education"),
+        icon: "mortar-board",
         sortOrder: 5,
+      },
+      BUSINESS_ANALYSIS: {
+        id: "business-analysis",
+        name: t("category.business-analysis"),
+        description: t("category.business-analysis"),
+        icon: "briefcase",
+        sortOrder: 6,
       },
     };
   }

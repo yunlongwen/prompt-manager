@@ -13,6 +13,7 @@ import { StorageService } from "../services/StorageService";
 import { ClipboardService } from "../services/ClipboardService";
 import { UIService } from "../services/UIService";
 import { ImportExportService } from "../services/ImportExportService";
+import { SyncService } from "../services/SyncService";
 import { CursorIntegrationService } from "../services/CursorIntegrationService";
 import { ChatIntegrationFactory } from "../services/ChatIntegrationFactory";
 import { ChatIntegrationOptions, ChatIntegrationStatus, EditorEnvironmentType } from "../types";
@@ -30,6 +31,7 @@ export class PromptManager implements IPromptManager {
   private clipboardService: ClipboardService;
   private uiService: UIService;
   private importExportService: ImportExportService;
+  private syncService!: SyncService;
   private cursorIntegrationService: CursorIntegrationService;
   private chatIntegrationFactory: ChatIntegrationFactory;
   private context: vscode.ExtensionContext | null = null;
@@ -67,6 +69,9 @@ export class PromptManager implements IPromptManager {
       // 初始化存储服务
       this.storageService = new StorageService(context);
       await this.storageService.initialize();
+
+      // 初始化同步服务
+      this.syncService = SyncService.getInstance(this.storageService);
 
       // 检查是否是首次使用
       await this.ensureDefaultData();
@@ -149,7 +154,7 @@ export class PromptManager implements IPromptManager {
   }
 
   /**
-   * 删除Prompt
+   * 删除Prompt（移至未分类）
    * @param promptId Prompt ID
    */
   async deletePrompt(promptId: string): Promise<void> {
@@ -166,11 +171,43 @@ export class PromptManager implements IPromptManager {
       if (confirmed) {
         await this.storageService.deletePrompt(promptId);
         this._onDidPromptsChange.fire();
-        await this.uiService.showInfo(t("message.promptDeleted", prompt.title));
+        await this.uiService.showInfo("Prompt已移至未分类");
       }
     } catch (error) {
       console.error("删除Prompt失败:", error);
       await this.uiService.showError(t("error.deletePromptFailed"));
+    }
+  }
+
+  /**
+   * 彻底删除未分类的Prompt
+   * @param promptId Prompt ID
+   */
+  async deleteUncategorizedPromptCompletely(promptId: string): Promise<void> {
+    try {
+      const prompt = await this.storageService.getPrompt(promptId);
+
+      if (!prompt) {
+        await this.uiService.showError("提示词不存在");
+        return;
+      }
+
+      // 直接从存储中删除（彻底删除）
+      const prompts = await this.storageService.getPrompts();
+      const filteredPrompts = prompts.filter((p) => p.id !== promptId);
+
+      if (filteredPrompts.length === prompts.length) {
+        await this.uiService.showError("提示词不存在");
+        return;
+      }
+
+      // 更新存储
+      await this.storageService.savePrompts(filteredPrompts);
+      this._onDidPromptsChange.fire();
+      await this.uiService.showInfo(`提示词 "${prompt.title}" 已彻底删除`);
+    } catch (error) {
+      console.error("彻底删除提示词失败:", error);
+      await this.uiService.showError("删除失败");
     }
   }
 
@@ -610,50 +647,25 @@ export class PromptManager implements IPromptManager {
    */
   private async ensureDefaultData(): Promise<void> {
     try {
-      const prompts = await this.storageService.getPrompts();
-      const categories = await this.storageService.getCategories();
+      // 检查数据版本，如果版本不匹配则重置数据
+      const currentVersion = "2.0.0"; // 更新版本号以触发数据重置
+      const storedVersion = this.context?.globalState.get<string>("prompt-manager.data-version");
 
-      // 检查并补充缺失的默认分类
-      const existingCategoryIds = new Set(categories.map((c) => c.id));
-      const missingCategories = Object.values(DEFAULT_CATEGORIES).filter(
-        (defaultCategory) => !existingCategoryIds.has(defaultCategory.id)
-      );
+      const needsReset = storedVersion !== currentVersion;
 
-      if (missingCategories.length > 0) {
-        console.log(`发现 ${missingCategories.length} 个缺失的默认分类，正在补充...`);
-        for (const defaultCategory of missingCategories) {
-          await this.storageService.saveCategory(defaultCategory);
-          console.log(`已补充默认分类: ${defaultCategory.name} (${defaultCategory.id})`);
-        }
-      }
+      if (needsReset) {
+        console.log(`检测到数据版本变化 (旧版本: ${storedVersion || '无'}, 新版本: ${currentVersion})，正在重置数据...`);
 
-      // 如果完全没有分类，创建所有默认分类
-      if (categories.length === 0) {
+        // 清空所有现有数据（包括用户自定义的提示词和分类）
+        await this.storageService.clearAll();
+
+        // 创建新的默认分类
         for (const defaultCategory of Object.values(DEFAULT_CATEGORIES)) {
           await this.storageService.saveCategory(defaultCategory);
+          console.log(`已创建默认分类: ${defaultCategory.name} (${defaultCategory.id})`);
         }
-        console.log("已创建默认分类");
-      }
 
-      // 检查并补充缺失的默认 Prompt
-      const existingPromptIds = new Set(prompts.map((p) => p.id));
-      const missingPrompts = DEFAULT_PROMPTS.filter((defaultPrompt) => !existingPromptIds.has(defaultPrompt.id));
-
-      if (missingPrompts.length > 0) {
-        console.log(`发现 ${missingPrompts.length} 个缺失的默认 Prompt，正在补充...`);
-        for (const defaultPrompt of missingPrompts) {
-          // 类型转换以解决readonly兼容性问题
-          const promptItem: PromptItem = {
-            ...defaultPrompt,
-            tags: defaultPrompt.tags ? [...defaultPrompt.tags] : undefined,
-          };
-          await this.storageService.savePrompt(promptItem);
-          console.log(`已补充默认 Prompt: ${defaultPrompt.title} (${defaultPrompt.id})`);
-        }
-      }
-
-      // 如果完全没有 Prompt，创建所有默认示例
-      if (prompts.length === 0) {
+        // 创建所有分类的说明书提示词
         for (const defaultPrompt of DEFAULT_PROMPTS) {
           // 类型转换以解决readonly兼容性问题
           const promptItem: PromptItem = {
@@ -661,8 +673,67 @@ export class PromptManager implements IPromptManager {
             tags: defaultPrompt.tags ? [...defaultPrompt.tags] : undefined,
           };
           await this.storageService.savePrompt(promptItem);
+          console.log(`已创建说明书: ${defaultPrompt.title} (${defaultPrompt.id})`);
         }
-        console.log("已创建默认示例Prompt");
+
+        // 标记版本更新
+        this.context?.globalState.update("prompt-manager.data-version", currentVersion);
+        console.log("数据版本已更新，所有旧数据已被清除");
+      } else {
+        // 正常初始化逻辑
+        const prompts = await this.storageService.getPrompts();
+        const categories = await this.storageService.getCategories();
+
+        // 检查并补充缺失的默认分类
+        const existingCategoryIds = new Set(categories.map((c) => c.id));
+        const missingCategories = Object.values(DEFAULT_CATEGORIES).filter(
+          (defaultCategory) => !existingCategoryIds.has(defaultCategory.id)
+        );
+
+        if (missingCategories.length > 0) {
+          console.log(`发现 ${missingCategories.length} 个缺失的默认分类，正在补充...`);
+          for (const defaultCategory of missingCategories) {
+            await this.storageService.saveCategory(defaultCategory);
+            console.log(`已补充默认分类: ${defaultCategory.name} (${defaultCategory.id})`);
+          }
+        }
+
+        // 如果完全没有分类，创建所有默认分类
+        if (categories.length === 0) {
+          for (const defaultCategory of Object.values(DEFAULT_CATEGORIES)) {
+            await this.storageService.saveCategory(defaultCategory);
+          }
+          console.log("已创建默认分类");
+        }
+
+        // 获取当前应该存在的提示词ID集合
+        const currentPromptIds = new Set(DEFAULT_PROMPTS.map(p => p.id));
+
+        // 清理不再存在的旧提示词（彻底删除）
+        const promptsToDelete = prompts.filter(p => !currentPromptIds.has(p.id));
+        if (promptsToDelete.length > 0) {
+          console.log(`发现 ${promptsToDelete.length} 个过时的提示词，正在清理...`);
+          const updatedPrompts = prompts.filter(p => currentPromptIds.has(p.id));
+          await this.storageService.savePrompts(updatedPrompts);
+          console.log(`已清理 ${promptsToDelete.length} 个过时提示词`);
+        }
+
+        // 检查并补充缺失的默认 Prompt
+        const existingPromptIds = new Set(prompts.map((p) => p.id));
+        const missingPrompts = DEFAULT_PROMPTS.filter((defaultPrompt) => !existingPromptIds.has(defaultPrompt.id));
+
+        if (missingPrompts.length > 0) {
+          console.log(`发现 ${missingPrompts.length} 个缺失的说明书，正在补充...`);
+          for (const defaultPrompt of missingPrompts) {
+            // 类型转换以解决readonly兼容性问题
+            const promptItem: PromptItem = {
+              ...defaultPrompt,
+              tags: defaultPrompt.tags ? [...defaultPrompt.tags] : undefined,
+            };
+            await this.storageService.savePrompt(promptItem);
+            console.log(`已补充说明书: ${defaultPrompt.title} (${defaultPrompt.id})`);
+          }
+        }
       }
     } catch (error) {
       console.error("创建默认数据失败:", error);
@@ -954,13 +1025,95 @@ export class PromptManager implements IPromptManager {
   }
 
   /**
+   * 从远端拉取数据
+   */
+  async pullFromRemote(): Promise<void> {
+    try {
+      // 检查同步状态
+      const syncStatus = await this.syncService.getSyncStatus();
+      if (!syncStatus.isConfigured) {
+        const configure = await this.uiService.showConfirmDialog(
+          "同步功能未配置，请先在设置中配置同步服务器和认证令牌。\n\n是否现在打开设置页面？"
+        );
+        if (configure) {
+          await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager");
+        }
+        return;
+      }
+
+      // 显示确认对话框
+      const confirmed = await this.uiService.showConfirmDialog(
+        "确定要从远端拉取最新数据吗？\n\n⚠️ 这将覆盖本地所有提示词和分类数据。"
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      await this.uiService.showInfo("正在从远端拉取数据，请稍候...");
+
+      const result = await this.syncService.pull({ overwriteLocal: true });
+
+      if (result.success) {
+        // 触发数据变更事件
+        this._onDidPromptsChange.fire();
+
+        const data = result.data!;
+        await this.uiService.showInfo(
+          `🎉 同步成功！\n\n📥 拉取完成\n📊 提示词: ${data.promptsSynced} 个\n📁 分类: ${data.categoriesSynced} 个\n\n数据已覆盖本地内容。`
+        );
+      } else {
+        await this.uiService.showError(`同步失败: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("拉取数据失败:", error);
+      await this.uiService.showError("拉取失败，请检查网络连接和配置");
+    }
+  }
+
+  /**
+   * 推送数据到远端
+   */
+  async pushToRemote(): Promise<void> {
+    try {
+      // 检查同步状态
+      const syncStatus = await this.syncService.getSyncStatus();
+      if (!syncStatus.isConfigured) {
+        const configure = await this.uiService.showConfirmDialog(
+          "同步功能未配置，请先在设置中配置同步服务器和认证令牌。\n\n是否现在打开设置页面？"
+        );
+        if (configure) {
+          await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager");
+        }
+        return;
+      }
+
+      await this.uiService.showInfo("正在推送数据到远端，请稍候...");
+
+      const result = await this.syncService.push();
+
+      if (result.success) {
+        const data = result.data!;
+        await this.uiService.showInfo(
+          `🎉 推送成功！\n\n📤 推送完成\n📊 提示词: ${data.promptsSynced} 个\n📁 分类: ${data.categoriesSynced} 个\n\n数据已同步到远端。`
+        );
+      } else {
+        await this.uiService.showError(`推送失败: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("推送数据失败:", error);
+      await this.uiService.showError("推送失败，请检查网络连接和配置");
+    }
+  }
+
+  /**
    * 重新初始化默认数据（清空所有数据并重新创建默认数据）
    */
   async reinitializeDefaultData(): Promise<void> {
     try {
       // 显示确认对话框
       const confirmed = await this.uiService.showConfirmDialog(
-        "确定要重新初始化默认数据吗？\n\n⚠️ 这将删除所有现有的 Prompt 和分类，并重新创建默认模板。\n\n此操作不可恢复！"
+        "确定要重新初始化默认数据吗？\n\n⚠️ 这将删除所有现有的 Prompt 和分类，并重新创建新的默认分类结构。\n\n此操作不可恢复！"
       );
 
       if (!confirmed) {
@@ -970,15 +1123,19 @@ export class PromptManager implements IPromptManager {
       // 清空所有数据
       await this.storageService.clearAll();
 
+      // 重置版本号以触发数据重置逻辑
+      this.context?.globalState.update("prompt-manager.data-version", null);
+
       // 重新创建默认数据
       await this.ensureDefaultData();
 
       // 触发数据变更事件
       this._onDidPromptsChange.fire();
 
+      const metapromptCount = DEFAULT_PROMPTS.filter(p => p.categoryId === 'metaprompt').length;
+
       await this.uiService.showInfo(
-        `🎉 默认数据重新初始化完成！\n\n📊 已创建:\n• ${Object.keys(DEFAULT_CATEGORIES).length} 个默认分类\n• ${DEFAULT_PROMPTS.length
-        } 个默认 Prompt 模板\n\n现在您可以看到所有最新的默认模板了。`
+        `🎉 默认数据重新初始化完成！\n\n📊 已创建:\n• ${Object.keys(DEFAULT_CATEGORIES).length} 个默认分类\n• ${metapromptCount} 个元提示词模板\n\n其他新分类为空，您可以根据需要添加提示词。`
       );
     } catch (error) {
       console.error("重新初始化默认数据失败:", error);

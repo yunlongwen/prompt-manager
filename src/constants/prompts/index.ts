@@ -1,9 +1,10 @@
-import { codingPrompts } from './coding';
-import { writingPrompts } from './writing';
-import { generalPrompts } from './general';
-import { uidesignPrompts } from './uidesign';
-import { llmPrompts } from './llm';
-import { otherPrompts } from './other';
+import { metapromptPrompts } from './metaprompt';
+import { programmingPrompts } from './programming';
+import { philosophyToolsPrompts } from './philosophy-tools';
+import { contentCreationPrompts } from './content-creation';
+import { productivityPrompts } from './productivity';
+import { educationPrompts } from './education';
+import { businessAnalysisPrompts } from './business-analysis';
 import { scanPrompts, scanCategories } from './autoLoader';
 
 // 自动扫描并加载所有 prompts 和分类
@@ -14,12 +15,13 @@ const autoLoadedCategories = scanCategories(__dirname);
 export const defaultPrompts = [
   ...autoLoadedPrompts,
   // 为了确保关键 prompts 一定存在，显式包含它们
-  ...codingPrompts,
-  ...writingPrompts,
-  ...generalPrompts,
-  ...uidesignPrompts,
-  ...llmPrompts,
-  ...otherPrompts,
+  ...metapromptPrompts,
+  ...programmingPrompts,
+  ...philosophyToolsPrompts,
+  ...contentCreationPrompts,
+  ...productivityPrompts,
+  ...educationPrompts,
+  ...businessAnalysisPrompts,
 ] as const;
 
 // 导出自动加载的分类
