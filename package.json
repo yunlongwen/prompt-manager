@@ -169,6 +169,18 @@
                 "title": "%commands.prompt-manager.reinitializeDefaultData.title%",
                 "category": "Prompt Manager",
                 "icon": "$(refresh)"
+            },
+            {
+                "command": "prompt-manager.gitPush",
+                "title": "%commands.prompt-manager.gitPush.title%",
+                "category": "Prompt Manager",
+                "icon": "$(arrow-up)"
+            },
+            {
+                "command": "prompt-manager.gitPull",
+                "title": "%commands.prompt-manager.gitPull.title%",
+                "category": "Prompt Manager",
+                "icon": "$(arrow-down)"
             }
         ],
         "configuration": {
@@ -224,6 +236,12 @@
                 },
                 {
                     "command": "prompt-manager.reinitializeDefaultData"
+                },
+                {
+                    "command": "prompt-manager.gitPush"
+                },
+                {
+                    "command": "prompt-manager.gitPull"
                 }
             ],
             "view/title": [
@@ -233,14 +251,24 @@
                     "group": "navigation@0"
                 },
                 {
+                    "command": "prompt-manager.gitPush",
+                    "when": "view == prompt-manager.promptTree",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "prompt-manager.gitPull",
+                    "when": "view == prompt-manager.promptTree",
+                    "group": "navigation@2"
+                },
+                {
                     "command": "prompt-manager.clearSearch",
                     "when": "view == prompt-manager.promptTree && prompt-manager.searchActive",
-                    "group": "navigation@1"
+                    "group": "navigation@3"
                 },
                 {
                     "command": "prompt-manager.refreshTree",
                     "when": "view == prompt-manager.promptTree",
-                    "group": "navigation@2"
+                    "group": "navigation@4"
                 },
                 {
                     "command": "prompt-manager.addCategoryFromTree",

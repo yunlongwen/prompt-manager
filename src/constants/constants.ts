@@ -40,6 +40,9 @@ export const COMMANDS = {
   // 同步相关命令
   PULL_FROM_REMOTE: "prompt-manager.pullFromRemote",
   PUSH_TO_REMOTE: "prompt-manager.pushToRemote",
+  // Git相关命令
+  GIT_PUSH: "prompt-manager.gitPush",
+  GIT_PULL: "prompt-manager.gitPull",
 } as const;
 
 /** 存储键常量 */
