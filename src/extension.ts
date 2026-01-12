@@ -1042,168 +1042,25 @@ async function showWelcomeMessage(context: vscode.ExtensionContext) {
 }
 
 /**
- * 执行Git Push操作
+ * 执行Git Push操作 - 推送提示词数据到远端
  */
 async function gitPush(): Promise<void> {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) {
-    vscode.window.showErrorMessage("未找到工作区");
-    return;
-  }
-
   try {
-    // 获取当前仓库的远程URL
-    const gitRemoteUrl = await getGitRemoteUrl(workspaceFolder.uri.fsPath);
-    if (!gitRemoteUrl) {
-      vscode.window.showErrorMessage("无法获取Git远程仓库URL，请确保当前目录是Git仓库");
-      return;
-    }
-
-    // 显示确认对话框
-    const confirmed = await vscode.window.showInformationMessage(
-      `确定要推送代码到远程仓库吗？\n\n📍 仓库: ${gitRemoteUrl}`,
-      { modal: false },
-      "确认推送"
-    );
-
-    if (confirmed !== "确认推送") {
-      return;
-    }
-
-    // 显示进度提示
-    await vscode.window.withProgress({
-      location: vscode.ProgressLocation.Notification,
-      title: "Git Push",
-      cancellable: true
-    }, async (progress, token) => {
-      progress.report({ message: "正在推送代码..." });
-
-      // 使用终端执行git push
-      const terminal = vscode.window.createTerminal({
-        name: "Git Push",
-        cwd: workspaceFolder.uri.fsPath
-      });
-
-      return new Promise<void>((resolve, reject) => {
-        // 监听终端关闭事件
-        const disposable = vscode.window.onDidCloseTerminal(closedTerminal => {
-          if (closedTerminal === terminal) {
-            disposable.dispose();
-            resolve();
-          }
-        });
-
-        // 取消操作处理
-        token.onCancellationRequested(() => {
-          terminal.dispose();
-          disposable.dispose();
-          reject(new Error("操作已取消"));
-        });
-
-        terminal.show();
-        terminal.sendText("git push");
-
-        // 显示提示消息
-        vscode.window.showInformationMessage(`正在推送代码到: ${gitRemoteUrl}`);
-      });
-    });
+    await promptManager.pushToRemote();
   } catch (error) {
-    console.error("Git push失败:", error);
-    if (error instanceof Error && error.message !== "操作已取消") {
-      vscode.window.showErrorMessage(`Git push失败: ${error.message}`);
-    }
+    console.error("推送提示词数据失败:", error);
+    vscode.window.showErrorMessage("推送失败");
   }
 }
 
 /**
- * 执行Git Pull操作
+ * 执行Git Pull操作 - 从远端拉取最新的提示词数据并覆盖本地数据库
  */
 async function gitPull(): Promise<void> {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) {
-    vscode.window.showErrorMessage("未找到工作区");
-    return;
-  }
-
   try {
-    // 获取当前仓库的远程URL
-    const gitRemoteUrl = await getGitRemoteUrl(workspaceFolder.uri.fsPath);
-    if (!gitRemoteUrl) {
-      vscode.window.showErrorMessage("无法获取Git远程仓库URL，请确保当前目录是Git仓库");
-      return;
-    }
-
-    // 显示确认对话框
-    const confirmed = await vscode.window.showInformationMessage(
-      `确定要从远程仓库拉取代码吗？\n\n📍 仓库: ${gitRemoteUrl}`,
-      { modal: false },
-      "确认拉取"
-    );
-
-    if (confirmed !== "确认拉取") {
-      return;
-    }
-
-    // 显示进度提示
-    await vscode.window.withProgress({
-      location: vscode.ProgressLocation.Notification,
-      title: "Git Pull",
-      cancellable: true
-    }, async (progress, token) => {
-      progress.report({ message: "正在拉取代码..." });
-
-      // 使用终端执行git pull
-      const terminal = vscode.window.createTerminal({
-        name: "Git Pull",
-        cwd: workspaceFolder.uri.fsPath
-      });
-
-      return new Promise<void>((resolve, reject) => {
-        // 监听终端关闭事件
-        const disposable = vscode.window.onDidCloseTerminal(closedTerminal => {
-          if (closedTerminal === terminal) {
-            disposable.dispose();
-            resolve();
-          }
-        });
-
-        // 取消操作处理
-        token.onCancellationRequested(() => {
-          terminal.dispose();
-          disposable.dispose();
-          reject(new Error("操作已取消"));
-        });
-
-        terminal.show();
-        terminal.sendText("git pull");
-
-        // 显示提示消息
-        vscode.window.showInformationMessage(`正在拉取代码从: ${gitRemoteUrl}`);
-      });
-    });
+    await promptManager.pullFromRemote();
   } catch (error) {
-    console.error("Git pull失败:", error);
-    if (error instanceof Error && error.message !== "操作已取消") {
-      vscode.window.showErrorMessage(`Git pull失败: ${error.message}`);
-    }
-  }
-}
-
-/**
- * 获取Git远程仓库URL
- */
-async function getGitRemoteUrl(workspacePath: string): Promise<string | null> {
-  try {
-    const { execSync } = require('child_process');
-    const remoteUrl = execSync('git config --get remote.origin.url', {
-      cwd: workspacePath,
-      encoding: 'utf8',
-      stdio: 'pipe'
-    }).trim();
-
-    return remoteUrl || null;
-  } catch (error) {
-    console.error("获取Git远程URL失败:", error);
-    return null;
+    console.error("拉取提示词数据失败:", error);
+    vscode.window.showErrorMessage("拉取失败");
   }
 }

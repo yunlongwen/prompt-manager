@@ -42,6 +42,6 @@
     "commands.prompt-manager.deleteUncategorizedPromptFromTree.title": "🗑️ Delete Permanently",
     "commands.prompt-manager.pullFromRemote.title": "⬇️ Pull from Remote",
     "commands.prompt-manager.pushToRemote.title": "⬆️ Push to Remote",
-    "commands.prompt-manager.gitPush.title": "⬆️ Git Push",
-    "commands.prompt-manager.gitPull.title": "⬇️ Git Pull"
+    "commands.prompt-manager.gitPush.title": "⬆️ Push Prompts",
+    "commands.prompt-manager.gitPull.title": "⬇️ Pull Prompts"
 }
