@@ -1116,17 +1116,26 @@ async function gitPull(): Promise<void> {
 
         progress.report({ message: "正在清理本地数据..." });
 
-        // 清理所有现有数据
+        // 清理所有现有数据（包括默认数据）
         await promptManager.clearAllData();
+
+        // 重置数据版本，避免插件重新创建默认数据
+        // 注意：这里无法直接访问context，但clearAllData应该已经清理了所有存储的数据
 
         progress.report({ message: "正在导入提示词数据..." });
 
         // 导入数据到本地数据库
         await promptManager.importData(promptsData);
 
+        // 标记数据为已从GitHub同步，避免插件重新加载默认数据
+        // 我们设置一个特殊的标记来防止ensureDefaultData重新创建默认数据
+        const context = (promptManager as any).context;
+        if (context) {
+          await context.globalState.update("prompt-manager.github-synced", true);
+          await context.globalState.update("prompt-manager.data-version", "github-synced");
+        }
+
         // 触发数据变更事件
-        // 注意：这里需要访问全局的promptManager实例，但可能需要修改架构
-        // 暂时通过命令触发刷新
         await vscode.commands.executeCommand('prompt-manager.refreshTree');
 
         vscode.window.showInformationMessage(`🎉 成功从GitHub拉取了 ${promptsData.prompts?.length || 0} 个提示词和 ${promptsData.categories?.length || 0} 个分类`);
@@ -1262,17 +1271,35 @@ function parsePromptsFromTypeScript(content: string, fileName: string): any[] {
     // 简单的正则表达式来提取导出的对象
     // 这是一个简化的解析器，实际项目中可能需要更复杂的AST解析
 
-    // 匹配 export const xxxPrompt = { ... } 模式
-    const exportConstRegex = /export\s+const\s+(\w+Prompt)\s*=\s*({[\s\S]*?});/g;
+    // 匹配 export const xxxGuide = { ... } 模式（说明书）
+    const exportGuideRegex = /export\s+const\s+(\w+Guide)\s*=\s*({[\s\S]*?})\s*as\s+const;/g;
     let match;
 
-    while ((match = exportConstRegex.exec(content)) !== null) {
+    while ((match = exportGuideRegex.exec(content)) !== null) {
+      const guideName = match[1];
+      const guideObjStr = match[2];
+
+      try {
+        // 使用Function构造器来安全地解析对象
+        const guideObj = eval(`(${guideObjStr})`);
+
+        if (guideObj && typeof guideObj === 'object' &&
+            guideObj.title && guideObj.content && guideObj.id) {
+          prompts.push(guideObj);
+        }
+      } catch (error) {
+        console.warn(`Failed to parse guide object in ${fileName}:`, error);
+      }
+    }
+
+    // 匹配 export const xxxPrompt = { ... } 模式
+    const exportPromptRegex = /export\s+const\s+(\w+Prompt)\s*=\s*({[\s\S]*?});/g;
+
+    while ((match = exportPromptRegex.exec(content)) !== null) {
       const promptName = match[1];
       const promptObjStr = match[2];
 
       try {
-        // 使用Function构造器来安全地解析对象（注意：这有安全风险，但在受控环境中可以使用）
-        // 实际项目中应该使用更安全的方法
         const promptObj = eval(`(${promptObjStr})`);
 
         if (promptObj && typeof promptObj === 'object' &&

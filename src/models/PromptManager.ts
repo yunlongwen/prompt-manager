@@ -647,6 +647,13 @@ export class PromptManager implements IPromptManager {
    */
   private async ensureDefaultData(): Promise<void> {
     try {
+      // 检查是否已从GitHub同步数据，如果是则跳过默认数据创建
+      const githubSynced = this.context?.globalState.get<boolean>("prompt-manager.github-synced", false);
+      if (githubSynced) {
+        console.log("检测到已从GitHub同步数据，跳过默认数据创建");
+        return;
+      }
+
       // 检查数据版本，如果版本不匹配则重置数据
       const currentVersion = "2.0.0"; // 更新版本号以触发数据重置
       const storedVersion = this.context?.globalState.get<string>("prompt-manager.data-version");
