@@ -1114,6 +1114,11 @@ async function gitPull(): Promise<void> {
         // 从GitHub API获取提示词数据
         const promptsData = await fetchPromptsFromGitHub();
 
+        progress.report({ message: "正在清理本地数据..." });
+
+        // 清理所有现有数据
+        await promptManager.clearAllData();
+
         progress.report({ message: "正在导入提示词数据..." });
 
         // 导入数据到本地数据库
@@ -1228,10 +1233,13 @@ async function parseCategoryFromGitHub(categoryName: string, apiUrl: string): Pr
       const icon = getCategoryIcon(categoryName);
       const sortOrder = getCategorySortOrder(categoryName);
 
+      // 本地化分类名称
+      const localizedName = getLocalizedCategoryName(categoryName);
+
       return {
         id: categoryName,
-        name: categoryName,
-        description: `${categoryName} 相关Prompt`,
+        name: localizedName,
+        description: `${localizedName} 相关Prompt`,
         icon: icon,
         sortOrder: sortOrder,
       };
@@ -1338,6 +1346,23 @@ function getCategorySortOrder(categoryName: string): number {
   };
 
   return orderMap[categoryName.toLowerCase()] || 999;
+}
+
+/**
+ * 获取本地化的分类名称
+ */
+function getLocalizedCategoryName(categoryName: string): string {
+  const nameMap: Record<string, string> = {
+    'metaprompt': '元提示词',
+    'programming': '编程',
+    'philosophy-tools': '哲学工具箱',
+    'content-creation': '内容创作',
+    'productivity': '生产力',
+    'education': '学习教育',
+    'business-analysis': '商业分析',
+  };
+
+  return nameMap[categoryName.toLowerCase()] || categoryName;
 }
 
 /**
