@@ -1144,10 +1144,18 @@ export class PromptManager implements IPromptManager {
    */
   async reinitializeDefaultData(): Promise<void> {
     try {
-      // 显示确认对话框
-      const confirmed = await this.uiService.showConfirmDialog(
-        "确定要重新初始化默认数据吗？\n\n⚠️ 这将删除所有现有的 Prompt 和分类，并重新创建默认数据。\n\n如果您之前从GitHub拉取过数据，将恢复到GitHub数据作为默认状态。\n\n此操作不可恢复！"
-      );
+      // 检查是否有GitHub数据
+      const githubData = this.context?.globalState.get<any>("prompt-manager.github-data");
+
+      let message = "确定要重新初始化默认数据吗？\n\n⚠️ 这将删除所有现有的 Prompt 和分类";
+      if (githubData) {
+        message += "，并恢复到从GitHub拉取的数据";
+      } else {
+        message += "，并重新创建插件内置的默认数据";
+      }
+      message += "。\n\n此操作不可恢复！";
+
+      const confirmed = await this.uiService.showConfirmDialog(message);
 
       if (!confirmed) {
         return;
@@ -1156,12 +1164,19 @@ export class PromptManager implements IPromptManager {
       // 清空所有数据
       await this.storageService.clearAll();
 
-      // 清除GitHub同步标记，但保留GitHub数据（如果存在）
-      this.context?.globalState.update("prompt-manager.github-synced", false);
-      // 注意：我们保留github-default标记，这样会恢复到GitHub数据
+      // 根据是否有GitHub数据来设置版本
+      if (githubData) {
+        // 有GitHub数据，设置为github-default版本，会恢复GitHub数据
+        this.context?.globalState.update("prompt-manager.data-version", "github-default");
+        console.log("重新初始化：将恢复GitHub数据");
+      } else {
+        // 没有GitHub数据，重置为null，会创建内置默认数据
+        this.context?.globalState.update("prompt-manager.data-version", null);
+        console.log("重新初始化：将创建内置默认数据");
+      }
 
-      // 重置版本号以触发数据重置逻辑
-      this.context?.globalState.update("prompt-manager.data-version", null);
+      // 清除同步标记
+      this.context?.globalState.update("prompt-manager.github-synced", false);
 
       // 重新创建默认数据
       await this.ensureDefaultData();
@@ -1169,11 +1184,20 @@ export class PromptManager implements IPromptManager {
       // 触发数据变更事件
       this._onDidPromptsChange.fire();
 
-      const totalPromptsCount = DEFAULT_PROMPTS.length;
-      const metapromptCount = DEFAULT_PROMPTS.filter(p => p.categoryId === 'metaprompt').length;
+      // 获取实际创建的数据统计
+      const createdPrompts = await this.storageService.getPrompts();
+      const createdCategories = await this.storageService.getCategories();
+
+      const totalPromptsCount = createdPrompts.length;
+      const metapromptCount = createdPrompts.filter(p => p.categoryId === 'metaprompt').length;
+
+      // 检查是否是GitHub数据
+      const isGitHubData = this.context?.globalState.get<string>("prompt-manager.data-version") === "github-default";
+
+      const dataSource = isGitHubData ? "GitHub" : "插件内置";
 
       await this.uiService.showInfo(
-        `🎉 默认数据重新初始化完成！\n\n📊 已创建:\n• ${Object.keys(DEFAULT_CATEGORIES).length} 个默认分类\n• ${totalPromptsCount} 个默认提示词模板\n  └ 其中 ${metapromptCount} 个元提示词模板\n\n其他新分类为空，您可以根据需要添加提示词。`
+        `🎉 默认数据重新初始化完成！\n\n📊 已创建 (${dataSource}数据):\n• ${createdCategories.length} 个默认分类\n• ${totalPromptsCount} 个默认提示词模板\n  └ 其中 ${metapromptCount} 个元提示词模板\n\n其他新分类为空，您可以根据需要添加提示词。`
       );
     } catch (error) {
       console.error("重新初始化默认数据失败:", error);
