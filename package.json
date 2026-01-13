@@ -333,12 +333,12 @@
                 },
                 {
                     "command": "prompt-manager.editGuideFromTree",
-                    "when": "view == prompt-manager.promptTree && resourceExtname == .guide",
+                    "when": "view == prompt-manager.promptTree && viewItem == guideItem",
                     "group": "1_main@1"
                 },
                 {
                     "command": "prompt-manager.viewGuideFromTree",
-                    "when": "view == prompt-manager.promptTree && resourceExtname == .guide",
+                    "when": "view == prompt-manager.promptTree && viewItem == guideItem",
                     "group": "1_main@2"
                 }
             ]

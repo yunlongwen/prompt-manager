@@ -1069,7 +1069,7 @@ export class PromptManager implements IPromptManager {
           "同步功能未配置，请先在设置中配置同步服务器和认证令牌。\n\n是否现在打开设置页面？"
         );
         if (configure) {
-          await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager");
+          await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager-for-ide ");
         }
         return;
       }
@@ -1116,7 +1116,7 @@ export class PromptManager implements IPromptManager {
           "同步功能未配置，请先在设置中配置同步服务器和认证令牌。\n\n是否现在打开设置页面？"
         );
         if (configure) {
-          await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager");
+          await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager-for-ide ");
         }
         return;
       }

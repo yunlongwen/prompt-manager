@@ -437,7 +437,7 @@ function registerCommands(context: vscode.ExtensionContext) {
   const openSettingsCmd = vscode.commands.registerCommand(COMMANDS.OPEN_SETTINGS, async () => {
     try {
       // 使用workbench.action.openSettings命令打开插件设置页面
-      await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager");
+      await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager-for-ide ");
     } catch (error) {
       console.error("打开设置失败:", error);
       vscode.window.showErrorMessage(t("error.generic"));
@@ -1037,7 +1037,7 @@ async function gitPush(): Promise<void> {
       );
 
       if (configure === "打开设置") {
-        await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager");
+        await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager-for-ide ");
       }
       return;
     }
