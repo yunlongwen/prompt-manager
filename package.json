@@ -198,6 +198,10 @@
                         "%configuration.properties.promptManager.defaultAction.enumDescriptions.chat%"
                     ],
                     "description": "%configuration.properties.promptManager.defaultAction.description%"
+                },
+                "promptManager.githubToken": {
+                    "type": "string",
+                    "description": "GitHub个人访问令牌，用于访问GitHub API（可选，提高API限制）"
                 }
             }
         },

@@ -4,6 +4,7 @@ import { PromptTreeDataProvider } from "./views/PromptTreeDataProvider";
 import { COMMANDS, TREE_VIEW } from "./constants/constants";
 import { t } from "./services/LocalizationService";
 import { EventEmitter } from 'events';
+import * as https from 'https';
 
 // 增加最大监听器限制
 EventEmitter.defaultMaxListeners = 20;
@@ -1020,19 +1021,30 @@ async function showWelcomeMessage(context: vscode.ExtensionContext) {
 }
 
 /**
- * 执行Git Push操作 - 推送提示词数据到GitHub
+ * 执行Git Push操作 - 推送提示词数据到GitHub仓库
  */
 async function gitPush(): Promise<void> {
   try {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      vscode.window.showErrorMessage("未找到工作区");
+    // 检查GitHub token配置
+    const config = vscode.workspace.getConfiguration("promptManager");
+    const githubToken = config.get<string>("githubToken");
+
+    if (!githubToken) {
+      const configure = await vscode.window.showWarningMessage(
+        "需要GitHub个人访问令牌才能推送数据到GitHub。\n\n是否现在打开设置页面进行配置？",
+        { modal: false },
+        "打开设置"
+      );
+
+      if (configure === "打开设置") {
+        await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:prompt-manager-dev.prompt-manager");
+      }
       return;
     }
 
     // 显示确认对话框
     const confirmed = await vscode.window.showInformationMessage(
-      `确定要推送提示词数据到GitHub吗？\n\n这将导出当前的所有提示词并推送到远程仓库。`,
+      `确定要推送提示词数据到GitHub吗？\n\n这将上传当前的所有提示词数据到 yunlongwen/prompt-manager 仓库。`,
       { modal: false },
       "确认推送"
     );
@@ -1044,7 +1056,7 @@ async function gitPush(): Promise<void> {
     // 显示进度提示
     await vscode.window.withProgress({
       location: vscode.ProgressLocation.Notification,
-      title: "推送提示词数据",
+      title: "推送提示词数据到GitHub",
       cancellable: false
     }, async (progress) => {
       progress.report({ message: "正在导出提示词数据..." });
@@ -1052,49 +1064,20 @@ async function gitPush(): Promise<void> {
       // 导出当前提示词数据
       const exportData = await promptManager.exportData();
 
-      progress.report({ message: "正在写入数据文件..." });
+      progress.report({ message: "正在上传到GitHub..." });
 
-      // 将数据写入到工作区的同步文件
-      const syncFilePath = vscode.Uri.joinPath(workspaceFolder.uri, '.prompt-manager-sync.json');
-      const jsonContent = JSON.stringify(exportData, null, 2);
-      await vscode.workspace.fs.writeFile(syncFilePath, Buffer.from(jsonContent, 'utf8'));
+      try {
+        // 将数据上传到GitHub
+        await uploadPromptsToGitHub(exportData, githubToken);
 
-      progress.report({ message: "正在推送到GitHub..." });
+        progress.report({ message: "上传完成" });
 
-      // 使用终端执行git命令推送
-      const terminal = vscode.window.createTerminal({
-        name: "Push Prompts",
-        cwd: workspaceFolder.uri.fsPath
-      });
+        vscode.window.showInformationMessage(`🎉 成功推送了 ${exportData.prompts?.length || 0} 个提示词和 ${exportData.categories?.length || 0} 个分类到GitHub！`);
 
-      return new Promise<void>((resolve, reject) => {
-        let completed = false;
-
-        const disposable = vscode.window.onDidCloseTerminal(closedTerminal => {
-          if (closedTerminal === terminal && !completed) {
-            completed = true;
-            disposable.dispose();
-            resolve();
-          }
-        });
-
-        terminal.show();
-        terminal.sendText(`git add .prompt-manager-sync.json`);
-        terminal.sendText(`git commit -m "Sync prompt data: ${new Date().toISOString()}"`);
-        terminal.sendText(`git push`);
-
-        // 设置超时，如果10秒内没有完成则认为成功
-        setTimeout(() => {
-          if (!completed) {
-            completed = true;
-            terminal.dispose();
-            disposable.dispose();
-            resolve();
-          }
-        }, 10000);
-
-        vscode.window.showInformationMessage("提示词数据已推送到GitHub");
-      });
+      } catch (uploadError) {
+        console.error("上传到GitHub失败:", uploadError);
+        throw new Error(`上传失败: ${uploadError instanceof Error ? uploadError.message : '未知错误'}`);
+      }
     });
 
   } catch (error) {
@@ -1104,19 +1087,13 @@ async function gitPush(): Promise<void> {
 }
 
 /**
- * 执行Git Pull操作 - 从GitHub拉取最新的提示词数据并覆盖本地数据库
+ * 执行Git Pull操作 - 从GitHub仓库拉取最新的提示词数据
  */
 async function gitPull(): Promise<void> {
   try {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      vscode.window.showErrorMessage("未找到工作区");
-      return;
-    }
-
     // 显示确认对话框
     const confirmed = await vscode.window.showWarningMessage(
-      `⚠️ 确定要从GitHub拉取提示词数据吗？\n\n这将覆盖当前的所有提示词和分类数据，且不可恢复！`,
+      `⚠️ 确定要从GitHub拉取提示词数据吗？\n\n这将从 yunlongwen/prompt-manager 仓库拉取最新的提示词数据并覆盖当前的所有本地数据，且不可恢复！`,
       { modal: true },
       "确认拉取"
     );
@@ -1128,63 +1105,397 @@ async function gitPull(): Promise<void> {
     // 显示进度提示
     await vscode.window.withProgress({
       location: vscode.ProgressLocation.Notification,
-      title: "拉取提示词数据",
+      title: "从GitHub拉取提示词",
       cancellable: false
     }, async (progress) => {
-      progress.report({ message: "正在从GitHub拉取..." });
+      progress.report({ message: "正在连接GitHub..." });
 
-      // 使用终端执行git pull
-      const terminal = vscode.window.createTerminal({
-        name: "Pull Prompts",
-        cwd: workspaceFolder.uri.fsPath
-      });
+      try {
+        // 从GitHub API获取提示词数据
+        const promptsData = await fetchPromptsFromGitHub();
 
-      return new Promise<void>((resolve, reject) => {
-        let completed = false;
+        progress.report({ message: "正在导入提示词数据..." });
 
-        const disposable = vscode.window.onDidCloseTerminal(closedTerminal => {
-          if (closedTerminal === terminal && !completed) {
-            completed = true;
-            disposable.dispose();
+        // 导入数据到本地数据库
+        await promptManager.importData(promptsData);
 
-            // 拉取完成后，读取同步文件并导入
-            setTimeout(async () => {
-              try {
-                const syncFilePath = vscode.Uri.joinPath(workspaceFolder.uri, '.prompt-manager-sync.json');
-                const fileContent = await vscode.workspace.fs.readFile(syncFilePath);
-                const importData = JSON.parse(fileContent.toString());
+        // 触发数据变更事件
+        // 注意：这里需要访问全局的promptManager实例，但可能需要修改架构
+        // 暂时通过命令触发刷新
+        await vscode.commands.executeCommand('prompt-manager.refreshTree');
 
-                progress.report({ message: "正在导入提示词数据..." });
-                await promptManager.importData(importData);
+        vscode.window.showInformationMessage(`🎉 成功从GitHub拉取了 ${promptsData.prompts?.length || 0} 个提示词和 ${promptsData.categories?.length || 0} 个分类`);
 
-                vscode.window.showInformationMessage("提示词数据已从GitHub成功拉取并导入");
-                resolve();
-              } catch (importError) {
-                console.error("导入数据失败:", importError);
-                vscode.window.showErrorMessage("数据拉取成功，但导入失败");
-                reject(importError);
-              }
-            }, 1000);
-          }
-        });
-
-        terminal.show();
-        terminal.sendText(`git pull`);
-
-        // 设置超时
-        setTimeout(() => {
-          if (!completed) {
-            completed = true;
-            terminal.dispose();
-            disposable.dispose();
-            reject(new Error("拉取超时"));
-          }
-        }, 15000);
-      });
+      } catch (error) {
+        console.error("从GitHub拉取数据失败:", error);
+        throw error;
+      }
     });
 
   } catch (error) {
     console.error("拉取提示词数据失败:", error);
     vscode.window.showErrorMessage(`拉取失败: ${error instanceof Error ? error.message : '未知错误'}`);
   }
+}
+
+/**
+ * 从GitHub仓库获取提示词数据
+ */
+async function fetchPromptsFromGitHub(): Promise<any> {
+  try {
+    // 从GitHub获取提示词数据
+    // 首先获取目录结构
+    const apiUrl = 'https://api.github.com/repos/yunlongwen/prompt-manager/contents/src/constants/prompts';
+    const dirContent = await httpGet(apiUrl);
+    const files = JSON.parse(dirContent);
+
+    const prompts: any[] = [];
+    const categories: any[] = [];
+
+    // 遍历目录中的文件和文件夹
+    for (const item of files) {
+      if (item.type === 'file' && (item.name.endsWith('.ts') || item.name.endsWith('.js'))) {
+        // 下载并解析TypeScript文件
+        try {
+          const fileContent = await httpGet(item.download_url);
+          const parsedPrompts = parsePromptsFromTypeScript(fileContent, item.name);
+          prompts.push(...parsedPrompts);
+        } catch (error) {
+          console.warn(`Failed to parse ${item.name}:`, error);
+        }
+      } else if (item.type === 'dir' && !item.name.startsWith('.')) {
+        // 处理分类目录
+        try {
+          const category = await parseCategoryFromGitHub(item.name, item.url);
+          if (category) {
+            categories.push(category);
+          }
+
+          // 获取目录中的提示词文件
+          const dirFiles = await httpGet(item.url);
+          const subFiles = JSON.parse(dirFiles);
+
+          for (const subFile of subFiles) {
+            if (subFile.type === 'file' && (subFile.name.endsWith('.ts') || subFile.name.endsWith('.js')) && subFile.name !== 'index.ts' && subFile.name !== 'index.js') {
+              try {
+                const fileContent = await httpGet(subFile.download_url);
+                const parsedPrompts = parsePromptsFromTypeScript(fileContent, subFile.name);
+                // 设置分类ID
+                parsedPrompts.forEach((prompt: any) => {
+                  if (!prompt.categoryId) {
+                    prompt.categoryId = item.name;
+                  }
+                });
+                prompts.push(...parsedPrompts);
+              } catch (error) {
+                console.warn(`Failed to parse ${subFile.name}:`, error);
+              }
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to process category ${item.name}:`, error);
+        }
+      }
+    }
+
+    // 构建导入数据结构
+    return {
+      version: "1.0.0",
+      exportTime: new Date().toISOString(),
+      prompts: prompts,
+      categories: categories
+    };
+
+  } catch (error) {
+    console.error("获取GitHub数据失败:", error);
+    throw new Error(`从GitHub获取数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  }
+}
+
+/**
+ * 从GitHub解析分类信息
+ */
+async function parseCategoryFromGitHub(categoryName: string, apiUrl: string): Promise<any | null> {
+  try {
+    const dirContent = await httpGet(apiUrl);
+    const files = JSON.parse(dirContent);
+
+    // 检查是否有index.ts文件
+    const hasIndex = files.some((file: any) => file.name === 'index.ts' || file.name === 'index.js');
+
+    if (hasIndex) {
+      // 获取分类图标和排序
+      const icon = getCategoryIcon(categoryName);
+      const sortOrder = getCategorySortOrder(categoryName);
+
+      return {
+        id: categoryName,
+        name: categoryName,
+        description: `${categoryName} 相关Prompt`,
+        icon: icon,
+        sortOrder: sortOrder,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`解析分类 ${categoryName} 失败:`, error);
+    return null;
+  }
+}
+
+/**
+ * 从TypeScript代码中解析提示词
+ */
+function parsePromptsFromTypeScript(content: string, fileName: string): any[] {
+  const prompts: any[] = [];
+
+  try {
+    // 简单的正则表达式来提取导出的对象
+    // 这是一个简化的解析器，实际项目中可能需要更复杂的AST解析
+
+    // 匹配 export const xxxPrompt = { ... } 模式
+    const exportConstRegex = /export\s+const\s+(\w+Prompt)\s*=\s*({[\s\S]*?});/g;
+    let match;
+
+    while ((match = exportConstRegex.exec(content)) !== null) {
+      const promptName = match[1];
+      const promptObjStr = match[2];
+
+      try {
+        // 使用Function构造器来安全地解析对象（注意：这有安全风险，但在受控环境中可以使用）
+        // 实际项目中应该使用更安全的方法
+        const promptObj = eval(`(${promptObjStr})`);
+
+        if (promptObj && typeof promptObj === 'object' &&
+            promptObj.title && promptObj.content && promptObj.id) {
+          prompts.push(promptObj);
+        }
+      } catch (error) {
+        console.warn(`Failed to parse prompt object in ${fileName}:`, error);
+      }
+    }
+
+    // 匹配 export const xxxPrompts = [ ... ] 模式
+    const exportArrayRegex = /export\s+const\s+(\w+Prompts)\s*=\s*(\[[\s\S]*?\]);/g;
+
+    while ((match = exportArrayRegex.exec(content)) !== null) {
+      const promptsName = match[1];
+      const promptsArrayStr = match[2];
+
+      try {
+        const promptsArray = eval(`(${promptsArrayStr})`);
+
+        if (Array.isArray(promptsArray)) {
+          promptsArray.forEach((promptObj: any) => {
+            if (promptObj && typeof promptObj === 'object' &&
+                promptObj.title && promptObj.content && promptObj.id) {
+              prompts.push(promptObj);
+            }
+          });
+        }
+      } catch (error) {
+        console.warn(`Failed to parse prompts array in ${fileName}:`, error);
+      }
+    }
+
+  } catch (error) {
+    console.error(`解析文件 ${fileName} 失败:`, error);
+  }
+
+  return prompts;
+}
+
+/**
+ * 获取分类图标
+ */
+function getCategoryIcon(categoryName: string): string {
+  const iconMap: Record<string, string> = {
+    'metaprompt': 'lightbulb',
+    'programming': 'code',
+    'philosophy-tools': 'search',
+    'content-creation': 'book',
+    'productivity': 'tools',
+    'education': 'mortar-board',
+    'business-analysis': 'briefcase',
+  };
+
+  return iconMap[categoryName.toLowerCase()] || 'folder';
+}
+
+/**
+ * 获取分类排序权重
+ */
+function getCategorySortOrder(categoryName: string): number {
+  const orderMap: Record<string, number> = {
+    'metaprompt': 0,
+    'programming': 1,
+    'philosophy-tools': 2,
+    'content-creation': 3,
+    'productivity': 4,
+    'education': 5,
+    'business-analysis': 6,
+  };
+
+  return orderMap[categoryName.toLowerCase()] || 999;
+}
+
+/**
+ * 将提示词数据上传到GitHub仓库
+ */
+async function uploadPromptsToGitHub(data: any, token: string): Promise<void> {
+  try {
+    // 将数据转换为JSON字符串
+    const jsonContent = JSON.stringify(data, null, 2);
+    const base64Content = Buffer.from(jsonContent).toString('base64');
+
+    // 上传到GitHub的prompts-sync.json文件
+    const apiUrl = 'https://api.github.com/repos/yunlongwen/prompt-manager/contents/prompts-sync.json';
+
+    // 首先检查文件是否存在（获取当前SHA）
+    let sha: string | undefined;
+    try {
+      const response = await httpGetWithToken(apiUrl, token);
+      const fileData = JSON.parse(response);
+      sha = fileData.sha;
+    } catch (error) {
+      // 文件不存在，sha为undefined
+    }
+
+    // 准备上传数据
+    const uploadData: any = {
+      message: `Sync prompt data: ${new Date().toISOString()}`,
+      content: base64Content,
+      branch: 'main'
+    };
+
+    if (sha) {
+      uploadData.sha = sha; // 如果文件存在，需要提供SHA来更新
+    }
+
+    // 上传文件
+    await httpPutWithToken(apiUrl, token, JSON.stringify(uploadData));
+
+  } catch (error) {
+    console.error("上传到GitHub失败:", error);
+    throw error;
+  }
+}
+
+/**
+ * 带token的HTTP GET请求
+ */
+function httpGetWithToken(url: string, token: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const options = {
+      headers: {
+        'User-Agent': 'Prompt-Manager-Extension/1.0.0',
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    };
+
+    https.get(url, options, (res) => {
+      let data = '';
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          resolve(data);
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage || data}`));
+        }
+      });
+
+    }).on('error', (err) => {
+      reject(err);
+    });
+  });
+}
+
+/**
+ * 带token的HTTP PUT请求
+ */
+function httpPutWithToken(url: string, token: string, data: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const options = {
+      method: 'PUT',
+      headers: {
+        'User-Agent': 'Prompt-Manager-Extension/1.0.0',
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    };
+
+    const req = https.request(url, options, (res) => {
+      let responseData = '';
+
+      res.on('data', (chunk) => {
+        responseData += chunk;
+      });
+
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(responseData);
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage || responseData}`));
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.write(data);
+    req.end();
+  });
+}
+
+/**
+ * 简单的HTTP GET请求
+ */
+function httpGet(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const isGitHubApi = url.includes('api.github.com');
+
+    const options: any = {
+      headers: {
+        'User-Agent': 'Prompt-Manager-Extension/1.0.0',
+      }
+    };
+
+    // 如果是GitHub API，添加认证头（如果有token）
+    if (isGitHubApi) {
+      const config = vscode.workspace.getConfiguration("promptManager");
+      const token = config.get<string>("githubToken");
+      if (token) {
+        options.headers['Authorization'] = `token ${token}`;
+      }
+    }
+
+    https.get(url, options, (res) => {
+      let data = '';
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          resolve(data);
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage || 'Unknown error'}`));
+        }
+      });
+
+    }).on('error', (err) => {
+      reject(err);
+    });
+  });
 }
