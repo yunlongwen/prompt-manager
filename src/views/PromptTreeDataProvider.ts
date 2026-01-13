@@ -45,8 +45,12 @@ export class PromptTreeDataProvider implements IPromptTreeDataProvider {
     treeItem.iconPath = element.iconPath;
     treeItem.command = element.command;
     treeItem.tooltip = this.createTooltip(element);
-    // 设置resourceId用于菜单条件判断
-    (treeItem as any).resourceUri = vscode.Uri.parse(`prompt-manager:///${element.id}`);
+    // 设置resourceUri用于菜单条件判断
+    if (element.contextValue === TREE_CONTEXT_VALUES.GUIDE_ITEM) {
+      (treeItem as any).resourceUri = vscode.Uri.parse(`prompt-manager:///${element.id}.guide`);
+    } else {
+      (treeItem as any).resourceUri = vscode.Uri.parse(`prompt-manager:///${element.id}`);
+    }
 
     return treeItem;
   }
