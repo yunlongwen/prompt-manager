@@ -330,6 +330,16 @@
                     "command": "prompt-manager.deleteCategoryFromTree",
                     "when": "view == prompt-manager.promptTree && viewItem == categoryItem",
                     "group": "2_danger@1"
+                },
+                {
+                    "command": "prompt-manager.editGuideFromTree",
+                    "when": "view == prompt-manager.promptTree && viewItem == guideItem",
+                    "group": "1_main@1"
+                },
+                {
+                    "command": "prompt-manager.viewGuideFromTree",
+                    "when": "view == prompt-manager.promptTree && viewItem == guideItem",
+                    "group": "1_main@2"
                 }
             ]
         }

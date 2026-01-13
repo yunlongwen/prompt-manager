@@ -1171,7 +1171,7 @@ export class PromptManager implements IPromptManager {
         console.log("重新初始化：将恢复GitHub数据");
       } else {
         // 没有GitHub数据，重置为null，会创建内置默认数据
-        this.context?.globalState.update("prompt-manager.data-version", null);
+      this.context?.globalState.update("prompt-manager.data-version", null);
         console.log("重新初始化：将创建内置默认数据");
       }
 
