@@ -1042,6 +1042,14 @@ async function gitPush(): Promise<void> {
       return;
     }
 
+    // 验证token权限
+    try {
+      await validateGitHubToken(githubToken);
+    } catch (error) {
+      vscode.window.showErrorMessage(`GitHub Token验证失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      return;
+    }
+
     // 显示确认对话框
     const confirmed = await vscode.window.showInformationMessage(
       `确定要推送提示词数据到GitHub吗？\n\n这将上传当前的所有提示词数据到 yunlongwen/prompt-manager 仓库。`,
@@ -1074,9 +1082,29 @@ async function gitPush(): Promise<void> {
 
         vscode.window.showInformationMessage(`🎉 成功推送了 ${exportData.prompts?.length || 0} 个提示词和 ${exportData.categories?.length || 0} 个分类到GitHub！`);
 
-      } catch (uploadError) {
+      } catch (uploadError: any) {
         console.error("上传到GitHub失败:", uploadError);
-        throw new Error(`上传失败: ${uploadError instanceof Error ? uploadError.message : '未知错误'}`);
+
+        // 提供更具体的错误信息和解决方案
+        let errorMessage = "上传失败";
+        let detailedMessage = "";
+
+        if (uploadError.message?.includes("403")) {
+          errorMessage = "GitHub权限不足 (403 Forbidden)";
+          detailedMessage = "\n\n请检查：\n• GitHub Token是否有 'repo' 权限\n• Token是否已过期\n• 您是否有推送权限到此仓库\n\n如何配置Token：\n1. 访问 https://github.com/settings/tokens\n2. 生成新token，选择 'repo' 权限\n3. 在VS Code设置中更新 'Prompt Manager > GitHub个人访问令牌'";
+        } else if (uploadError.message?.includes("401")) {
+          errorMessage = "GitHub认证失败 (401 Unauthorized)";
+          detailedMessage = "\n\n请检查GitHub Token是否正确配置。";
+        } else if (uploadError.message?.includes("422")) {
+          errorMessage = "GitHub请求无效 (422 Unprocessable Entity)";
+          detailedMessage = "\n\n可能是文件内容过大或其他GitHub限制。";
+        }
+
+        // 显示详细错误信息
+        const fullMessage = errorMessage + detailedMessage;
+        vscode.window.showErrorMessage(fullMessage);
+
+        throw new Error(fullMessage);
       }
     });
 
@@ -1459,6 +1487,51 @@ function httpGetWithToken(url: string, token: string): Promise<string> {
       reject(err);
     });
   });
+}
+
+/**
+ * 验证GitHub Token权限
+ */
+async function validateGitHubToken(token: string): Promise<void> {
+  try {
+    // 测试token权限，尝试获取用户信息
+    const userUrl = 'https://api.github.com/user';
+    await httpGetWithToken(userUrl, token);
+
+    // 测试仓库访问权限
+    const repoUrl = 'https://api.github.com/repos/yunlongwen/prompt-manager';
+    await httpGetWithToken(repoUrl, token);
+
+    // 验证是否有推送权限（通过检查用户是否是协作者或所有者）
+    const collaboratorsUrl = 'https://api.github.com/repos/yunlongwen/prompt-manager/collaborators';
+    const collaboratorsResponse = await httpGetWithToken(collaboratorsUrl, token);
+    const collaborators = JSON.parse(collaboratorsResponse);
+
+    // 获取当前用户信息
+    const userResponse = await httpGetWithToken('https://api.github.com/user', token);
+    const user = JSON.parse(userResponse);
+
+    // 检查用户是否有推送权限
+    const hasPushPermission = collaborators.some((collaborator: any) =>
+      collaborator.login === user.login &&
+      (collaborator.permissions?.push || collaborator.permissions?.admin || collaborator.role_name === 'admin')
+    );
+
+    if (!hasPushPermission) {
+      throw new Error('您的GitHub Token没有推送权限到此仓库。请确保Token具有 \'repo\' 权限或您是仓库协作者。');
+    }
+
+  } catch (error: any) {
+    if (error.message?.includes("403")) {
+      throw new Error('GitHub Token权限不足。需要 \'repo\' 权限才能推送文件。');
+    } else if (error.message?.includes("401")) {
+      throw new Error('GitHub Token无效或已过期。');
+    } else if (error.message?.includes("404")) {
+      throw new Error('无法访问仓库。请检查仓库是否存在以及Token权限。');
+    } else {
+      throw error;
+    }
+  }
 }
 
 /**
