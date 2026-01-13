@@ -1130,6 +1130,9 @@ export class PromptManager implements IPromptManager {
       // 清空所有数据
       await this.storageService.clearAll();
 
+      // 清除GitHub同步标记，允许重新创建默认数据
+      this.context?.globalState.update("prompt-manager.github-synced", false);
+
       // 重置版本号以触发数据重置逻辑
       this.context?.globalState.update("prompt-manager.data-version", null);
 
@@ -1139,10 +1142,11 @@ export class PromptManager implements IPromptManager {
       // 触发数据变更事件
       this._onDidPromptsChange.fire();
 
+      const totalPromptsCount = DEFAULT_PROMPTS.length;
       const metapromptCount = DEFAULT_PROMPTS.filter(p => p.categoryId === 'metaprompt').length;
 
       await this.uiService.showInfo(
-        `🎉 默认数据重新初始化完成！\n\n📊 已创建:\n• ${Object.keys(DEFAULT_CATEGORIES).length} 个默认分类\n• ${metapromptCount} 个元提示词模板\n\n其他新分类为空，您可以根据需要添加提示词。`
+        `🎉 默认数据重新初始化完成！\n\n📊 已创建:\n• ${Object.keys(DEFAULT_CATEGORIES).length} 个默认分类\n• ${totalPromptsCount} 个默认提示词模板\n  └ 其中 ${metapromptCount} 个元提示词模板\n\n其他新分类为空，您可以根据需要添加提示词。`
       );
     } catch (error) {
       console.error("重新初始化默认数据失败:", error);
