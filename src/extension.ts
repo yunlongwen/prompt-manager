@@ -1127,12 +1127,11 @@ async function gitPull(): Promise<void> {
         // 导入数据到本地数据库
         await promptManager.importData(promptsData);
 
-        // 标记数据为已从GitHub同步，避免插件重新加载默认数据
-        // 我们设置一个特殊的标记来防止ensureDefaultData重新创建默认数据
+        // 保存GitHub数据作为默认数据
         const context = (promptManager as any).context;
         if (context) {
-          await context.globalState.update("prompt-manager.github-synced", true);
-          await context.globalState.update("prompt-manager.data-version", "github-synced");
+          await context.globalState.update("prompt-manager.github-data", promptsData);
+          await context.globalState.update("prompt-manager.data-version", "github-default");
         }
 
         // 触发数据变更事件

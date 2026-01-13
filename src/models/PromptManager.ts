@@ -647,17 +647,45 @@ export class PromptManager implements IPromptManager {
    */
   private async ensureDefaultData(): Promise<void> {
     try {
-      // 检查是否已从GitHub同步数据，如果是则跳过默认数据创建
-      const githubSynced = this.context?.globalState.get<boolean>("prompt-manager.github-synced", false);
-      if (githubSynced) {
-        console.log("检测到已从GitHub同步数据，跳过默认数据创建");
-        return;
-      }
-
-      // 检查数据版本，如果版本不匹配则重置数据
-      const currentVersion = "2.0.0"; // 更新版本号以触发数据重置
+      // 检查数据版本
       const storedVersion = this.context?.globalState.get<string>("prompt-manager.data-version");
 
+      // 如果版本是github-default，说明应该使用GitHub数据作为默认数据
+      if (storedVersion === "github-default") {
+        const githubData = this.context?.globalState.get<any>("prompt-manager.github-data");
+        if (githubData) {
+          console.log("正在恢复GitHub默认数据...");
+
+          // 检查是否已经有数据，避免重复创建
+          const existingPrompts = await this.storageService.getPrompts();
+          const existingCategories = await this.storageService.getCategories();
+
+          if (existingPrompts.length === 0 && existingCategories.length === 0) {
+            // 使用保存的GitHub数据
+            for (const category of githubData.categories || []) {
+              try {
+                await this.storageService.saveCategory(category);
+              } catch (error) {
+                console.warn(`创建GitHub分类 ${category.name} 失败:`, error);
+              }
+            }
+
+            for (const prompt of githubData.prompts || []) {
+              try {
+                await this.storageService.savePrompt(prompt);
+              } catch (error) {
+                console.warn(`创建GitHub提示词 ${prompt.title} 失败:`, error);
+              }
+            }
+
+            console.log(`GitHub默认数据恢复完成: ${githubData.categories?.length || 0} 个分类, ${githubData.prompts?.length || 0} 个提示词`);
+          }
+          return;
+        }
+      }
+
+      // 检查是否需要重置内置默认数据
+      const currentVersion = "2.0.0";
       const needsReset = storedVersion !== currentVersion;
 
       if (needsReset) {
@@ -1120,7 +1148,7 @@ export class PromptManager implements IPromptManager {
     try {
       // 显示确认对话框
       const confirmed = await this.uiService.showConfirmDialog(
-        "确定要重新初始化默认数据吗？\n\n⚠️ 这将删除所有现有的 Prompt 和分类，并重新创建新的默认分类结构。\n\n此操作不可恢复！"
+        "确定要重新初始化默认数据吗？\n\n⚠️ 这将删除所有现有的 Prompt 和分类，并重新创建默认数据。\n\n如果您之前从GitHub拉取过数据，将恢复到GitHub数据作为默认状态。\n\n此操作不可恢复！"
       );
 
       if (!confirmed) {
@@ -1130,8 +1158,9 @@ export class PromptManager implements IPromptManager {
       // 清空所有数据
       await this.storageService.clearAll();
 
-      // 清除GitHub同步标记，允许重新创建默认数据
+      // 清除GitHub同步标记，但保留GitHub数据（如果存在）
       this.context?.globalState.update("prompt-manager.github-synced", false);
+      // 注意：我们保留github-default标记，这样会恢复到GitHub数据
 
       // 重置版本号以触发数据重置逻辑
       this.context?.globalState.update("prompt-manager.data-version", null);
