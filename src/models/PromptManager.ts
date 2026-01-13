@@ -656,30 +656,28 @@ export class PromptManager implements IPromptManager {
         if (githubData) {
           console.log("正在恢复GitHub默认数据...");
 
-          // 检查是否已经有数据，避免重复创建
-          const existingPrompts = await this.storageService.getPrompts();
-          const existingCategories = await this.storageService.getCategories();
+          // 总是使用GitHub数据，不检查现有数据（因为可能已经被清理）
+          // 先清理现有数据
+          await this.storageService.clearAll();
 
-          if (existingPrompts.length === 0 && existingCategories.length === 0) {
-            // 使用保存的GitHub数据
-            for (const category of githubData.categories || []) {
-              try {
-                await this.storageService.saveCategory(category);
-              } catch (error) {
-                console.warn(`创建GitHub分类 ${category.name} 失败:`, error);
-              }
+          // 使用保存的GitHub数据
+          for (const category of githubData.categories || []) {
+            try {
+              await this.storageService.saveCategory(category);
+            } catch (error) {
+              console.warn(`创建GitHub分类 ${category.name} 失败:`, error);
             }
-
-            for (const prompt of githubData.prompts || []) {
-              try {
-                await this.storageService.savePrompt(prompt);
-              } catch (error) {
-                console.warn(`创建GitHub提示词 ${prompt.title} 失败:`, error);
-              }
-            }
-
-            console.log(`GitHub默认数据恢复完成: ${githubData.categories?.length || 0} 个分类, ${githubData.prompts?.length || 0} 个提示词`);
           }
+
+          for (const prompt of githubData.prompts || []) {
+            try {
+              await this.storageService.savePrompt(prompt);
+            } catch (error) {
+              console.warn(`创建GitHub提示词 ${prompt.title} 失败:`, error);
+            }
+          }
+
+          console.log(`GitHub默认数据恢复完成: ${githubData.categories?.length || 0} 个分类, ${githubData.prompts?.length || 0} 个提示词`);
           return;
         }
       }

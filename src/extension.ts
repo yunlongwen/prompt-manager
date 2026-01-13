@@ -1114,30 +1114,24 @@ async function gitPull(): Promise<void> {
         // 从GitHub API获取提示词数据
         const promptsData = await fetchPromptsFromGitHub();
 
-        progress.report({ message: "正在清理本地数据..." });
-
-        // 清理所有现有数据（包括默认数据）
-        await promptManager.clearAllData();
-
-        // 重置数据版本，避免插件重新创建默认数据
-        // 注意：这里无法直接访问context，但clearAllData应该已经清理了所有存储的数据
-
-        progress.report({ message: "正在导入提示词数据..." });
-
-        // 导入数据到本地数据库
-        await promptManager.importData(promptsData);
+        progress.report({ message: "正在保存GitHub数据..." });
 
         // 保存GitHub数据作为默认数据
         const context = (promptManager as any).context;
         if (context) {
           await context.globalState.update("prompt-manager.github-data", promptsData);
           await context.globalState.update("prompt-manager.data-version", "github-default");
+
+          // 清理本地数据，触发重新初始化
+          await promptManager.clearAllData();
         }
+
+        progress.report({ message: "数据保存完成，正在刷新..." });
 
         // 触发数据变更事件
         await vscode.commands.executeCommand('prompt-manager.refreshTree');
 
-        vscode.window.showInformationMessage(`🎉 成功从GitHub拉取了 ${promptsData.prompts?.length || 0} 个提示词和 ${promptsData.categories?.length || 0} 个分类`);
+        vscode.window.showInformationMessage(`🎉 成功从GitHub拉取了 ${promptsData.prompts?.length || 0} 个提示词和 ${promptsData.categories?.length || 0} 个分类！\n\n这些数据已保存为默认数据，重启插件后将自动使用GitHub数据。`);
 
       } catch (error) {
         console.error("从GitHub拉取数据失败:", error);
